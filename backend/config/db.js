@@ -7,6 +7,7 @@ const sequelize = new Sequelize(
     process.env.DB_PASS || '', 
     {
         host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 3306, // Reads 3307 from your .env
         dialect: 'mysql',
         logging: false
     }
@@ -15,7 +16,7 @@ const sequelize = new Sequelize(
 const testConnection = async () => {
     try {
         await sequelize.authenticate();
-        console.log('MySQL Database Connected Successfully.');
+        console.log(`MySQL Database Connected on port ${process.env.DB_PORT || 3306}.`);
     } catch (error) {
         console.error('Unable to connect to the database:', error);
     }
