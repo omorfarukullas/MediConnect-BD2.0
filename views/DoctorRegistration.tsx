@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { User, Mail, Phone, Lock, FileText, ArrowLeft, CheckCircle, Upload, Building2, Calendar, CreditCard, Award, GraduationCap } from 'lucide-react';
+import { User, Mail, Phone, Lock, FileText, ArrowLeft, CheckCircle, Upload, Building2, Calendar, CreditCard, Award, GraduationCap, AlertCircle } from 'lucide-react';
 import { Button, Card } from '../components/UIComponents';
+import { api } from '../services/apiClient';
 
 interface DoctorRegistrationProps {
   onBack: () => void;
@@ -11,6 +12,7 @@ interface DoctorRegistrationProps {
 export const DoctorRegistration: React.FC<DoctorRegistrationProps> = ({ onBack, onLoginClick }) => {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
   // Form State
   const [formData, setFormData] = useState({
@@ -51,13 +53,44 @@ export const DoctorRegistration: React.FC<DoctorRegistrationProps> = ({ onBack, 
       setStep(prev => prev - 1);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    setError('');
     setIsLoading(true);
-    // Simulate API Call
-    setTimeout(() => {
+    
+    try {
+      // Validate password
+      if (formData.password.length < 6) {
+        setError('Password must be at least 6 characters long');
         setIsLoading(false);
-        setStep(6); // Success Step
-    }, 1500);
+        return;
+      }
+
+      // Call real API
+      await api.register({
+        name: formData.fullName,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+        role: 'DOCTOR',
+        // Additional doctor fields - backend will store these
+        bmdcNumber: formData.bmdcNumber,
+        specialization: formData.specialization,
+        subSpecialization: formData.subSpecialization,
+        experience: parseInt(formData.experience) || 0,
+        hospital: formData.hospital,
+        degrees: formData.degrees,
+        consultationFee: parseInt(formData.physicalFee) || 0,
+        gender: formData.gender,
+        dateOfBirth: formData.dob
+      });
+
+      setIsLoading(false);
+      setStep(6); // Success Step
+    } catch (err: any) {
+      setError(err.message || 'Registration failed. Please try again.');
+      setIsLoading(false);
+      setStep(1); // Go back to first step to show error
+    }
   };
 
   const renderStepIndicator = () => (
@@ -94,6 +127,11 @@ export const DoctorRegistration: React.FC<DoctorRegistrationProps> = ({ onBack, 
             {step === 1 && (
                 <div className="space-y-6 animate-fade-in">
                     <h3 className="text-lg font-bold text-slate-800 border-b pb-2">Step 1: Basic Information</h3>
+                    {error && (
+                       <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2">
+                          <AlertCircle size={16} /> {error}
+                       </div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Full Name (Matches BMDC)</label>

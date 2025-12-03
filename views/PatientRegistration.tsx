@@ -1,11 +1,12 @@
 
 import React, { useState } from 'react';
-import { User, Mail, Phone, Lock, Calendar, ArrowLeft, CheckCircle } from 'lucide-react';
+import { User, Mail, Phone, Lock, Calendar, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react';
 import { Button, Card } from '../components/UIComponents';
+import { api } from '../services/apiClient';
 
 interface PatientRegistrationProps {
   onBack: () => void;
-  onRegisterSuccess: (email: string) => void;
+  onRegisterSuccess: (userData: any) => void;
   onLoginClick: () => void;
 }
 
@@ -18,17 +19,50 @@ export const PatientRegistration: React.FC<PatientRegistrationProps> = ({ onBack
     password: '',
     confirmPassword: ''
   });
+  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+
+    // Validate passwords match
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    // Validate password length
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return;
+    }
+
+    // Validate email
+    if (!formData.email) {
+      setError('Email is required');
+      return;
+    }
+
     setIsLoading(true);
 
-    // Simulate API Call
-    setTimeout(() => {
-        setIsLoading(false);
-        onRegisterSuccess(formData.email || formData.phone);
-    }, 1500);
+    try {
+      // Call real API
+      const response = await api.register({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+        role: 'PATIENT',
+        age: parseInt(formData.age)
+      });
+
+      // Success - pass user data to parent
+      onRegisterSuccess(response);
+    } catch (err: any) {
+      setError(err.message || 'Registration failed. Please try again.');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -45,6 +79,12 @@ export const PatientRegistration: React.FC<PatientRegistrationProps> = ({ onBack
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+                {error && (
+                   <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2">
+                      <AlertCircle size={16} /> {error}
+                   </div>
+                )}
+
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
                     <div className="relative">
@@ -92,10 +132,11 @@ export const PatientRegistration: React.FC<PatientRegistrationProps> = ({ onBack
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Email (Optional)</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
                     <div className="relative">
                         <Mail className="absolute left-3 top-3 text-slate-400" size={16} />
                         <input 
+                            required
                             type="email" 
                             className="w-full pl-10 p-2.5 rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-primary-500" 
                             placeholder="name@example.com"
@@ -112,7 +153,8 @@ export const PatientRegistration: React.FC<PatientRegistrationProps> = ({ onBack
                             <Lock className="absolute left-3 top-3 text-slate-400" size={16} />
                             <input 
                                 required 
-                                type="password" 
+                                type="password"
+                                minLength={6}
                                 className="w-full pl-10 p-2.5 rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-primary-500" 
                                 placeholder="••••••••"
                                 value={formData.password}
@@ -126,7 +168,8 @@ export const PatientRegistration: React.FC<PatientRegistrationProps> = ({ onBack
                             <Lock className="absolute left-3 top-3 text-slate-400" size={16} />
                             <input 
                                 required 
-                                type="password" 
+                                type="password"
+                                minLength={6}
                                 className="w-full pl-10 p-2.5 rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-primary-500" 
                                 placeholder="••••••••"
                                 value={formData.confirmPassword}

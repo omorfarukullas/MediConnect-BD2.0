@@ -37,13 +37,19 @@ const getDoctors = async (req, res) => {
             id: doc.id,
             name: doc.User.name,
             email: doc.User.email,
-            image: doc.User.image,
+            image: doc.User.image || `https://i.pravatar.cc/300?img=${doc.id}`,
             specialization: doc.specialization,
-            hospital: doc.hospitalName,
+            hospital: doc.hospitalName || 'Not specified',
+            location: doc.hospitalName || 'Dhaka',  // Can be extended
             bmdcNumber: doc.bmdcNumber,
             fees: { online: doc.feesOnline, physical: doc.feesPhysical },
             rating: doc.rating,
-            status: doc.status
+            isVerified: doc.isVerified,
+            status: doc.status,
+            experience: doc.experienceYears || 0,
+            degrees: doc.education || ['MBBS'],  // JSON field
+            languages: ['Bangla', 'English'],  // Can be added to model later
+            available: doc.available
         }));
 
         res.json(formattedDoctors);

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Users, Clock, Calendar, Video, CheckCircle, XCircle, ArrowLeft, 
     Home, List, Activity, FileText, CreditCard, Star, Bell, Settings, 
@@ -8,6 +8,8 @@ import {
 import { Card, Button, Badge } from '../components/UIComponents';
 import { MOCK_APPOINTMENTS, MOCK_DOCTORS } from '../constants';
 import { User as UserType } from '../types';
+import { NotificationBell } from '../components/NotificationBell';
+import { api } from '../services/apiClient';
 
 interface DoctorPortalProps {
     currentUser?: UserType;
@@ -20,6 +22,31 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
   const [currentQueue, setCurrentQueue] = useState(12);
   const [queueStatus, setQueueStatus] = useState<'ACTIVE' | 'PAUSED' | 'STOPPED'>('ACTIVE');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  
+  // Data loading state
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
+
+  // Fetch appointments on mount
+  useEffect(() => {
+    const fetchAppointments = async () => {
+      try {
+        setIsLoadingAppointments(true);
+        const data = await api.getAppointments();
+        setAppointments(data);
+      } catch (err) {
+        console.error('Error fetching appointments:', err);
+        // Fallback to mock data
+        setAppointments(MOCK_APPOINTMENTS);
+      } finally {
+        setIsLoadingAppointments(false);
+      }
+    };
+
+    if (currentUser) {
+      fetchAppointments();
+    }
+  }, [currentUser]);
 
   // Use currentUser or default to mock if testing without login
   const doctorName = currentUser?.name || 'Dr. Omor Faruck';
@@ -107,10 +134,7 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                    </div>
                 </div>
                 <div className="flex gap-3">
-                    <button className="p-2 text-slate-500 hover:bg-white hover:shadow-sm rounded-full relative transition-all">
-                        <Bell size={20} />
-                        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-                    </button>
+                    <NotificationBell />
                     <button className="p-2 text-slate-500 hover:bg-white hover:shadow-sm rounded-full transition-all">
                         <Settings size={20} />
                     </button>
@@ -165,7 +189,24 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {MOCK_APPOINTMENTS.map((apt) => (
+                                                {isLoadingAppointments ? (
+                                                    Array.from({ length: 3 }).map((_, i) => (
+                                                        <tr key={i} className="border-b border-slate-100 animate-pulse">
+                                                            <td className="p-3"><div className="h-4 bg-slate-200 rounded w-16"></div></td>
+                                                            <td className="p-3"><div className="h-4 bg-slate-200 rounded w-32"></div></td>
+                                                            <td className="p-3"><div className="h-4 bg-slate-200 rounded w-20"></div></td>
+                                                            <td className="p-3"><div className="h-4 bg-slate-200 rounded w-16"></div></td>
+                                                            <td className="p-3"><div className="h-4 bg-slate-200 rounded w-12"></div></td>
+                                                        </tr>
+                                                    ))
+                                                ) : appointments.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={5} className="p-8 text-center text-slate-500">
+                                                            No appointments scheduled
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    appointments.map((apt) => (
                                                     <tr key={apt.id} className="border-b border-slate-100 hover:bg-slate-50">
                                                         <td className="p-3 font-medium">{apt.time}</td>
                                                         <td className="p-3">
@@ -183,7 +224,8 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                                                             <button title="Cancel" className="text-red-600 hover:bg-red-50 p-1 rounded"><XCircle size={18}/></button>
                                                         </td>
                                                     </tr>
-                                                ))}
+                                                ))
+                                                )}
                                             </tbody>
                                         </table>
                                     </div>

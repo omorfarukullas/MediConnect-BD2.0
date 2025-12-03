@@ -6,6 +6,10 @@ import { Doctor, Appointment, AppointmentStatus, User as UserType } from '../typ
 import { Button, Card, Badge, Modal } from '../components/UIComponents';
 import { analyzeSymptoms, AISymptomResponse } from '../services/geminiService';
 import { MedicalHistory } from './MedicalHistory';
+import { api } from '../services/apiClient';
+import { NotificationBell } from '../components/NotificationBell';
+import { ReviewModal, DoctorReviews } from '../components/ReviewSystem';
+import { socketService } from '../services/socketService';
 
 interface PatientPortalProps {
   currentUser?: UserType;
@@ -19,6 +23,12 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   const [viewMode, setViewMode] = useState<'DASHBOARD' | 'MY_APPOINTMENTS' | 'SETTINGS' | 'MEDICAL_HISTORY'>(initialMode);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
+  // Data Loading State
+  const [isLoadingDoctors, setIsLoadingDoctors] = useState(true);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  
   // Sync prop change to state
   useEffect(() => {
     setViewMode(initialMode);
@@ -27,8 +37,67 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
     }
   }, [initialMode]);
 
-  // Appointments State (initialized from Mock)
-  const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
+  // Appointments State
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+
+  // Fetch doctors and appointments on mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch doctors
+        setIsLoadingDoctors(true);
+        const doctorsData = await api.getDoctors();
+        setDoctors(doctorsData);
+        setIsLoadingDoctors(false);
+
+        // Fetch appointments if user is logged in
+        if (currentUser) {
+          setIsLoadingAppointments(true);
+          const appointmentsData = await api.getAppointments();
+          setAppointments(appointmentsData);
+          setIsLoadingAppointments(false);
+        }
+      } catch (err: any) {
+        console.error('Error fetching data:', err);
+        setError(err.message || 'Failed to load data');
+        // Fallback to mock data on error
+        setDoctors(MOCK_DOCTORS);
+        setAppointments(MOCK_APPOINTMENTS);
+        setIsLoadingDoctors(false);
+        setIsLoadingAppointments(false);
+      }
+    };
+
+    fetchData();
+  }, [currentUser]);
+
+  // WebSocket real-time updates
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Listen for appointment updates
+    socketService.onAppointmentUpdated((appointmentData: any) => {
+      setAppointments(prev =>
+        prev.map(apt =>
+          apt.id === appointmentData.id ? { ...apt, ...appointmentData } : apt
+        )
+      );
+      console.log('📅 Appointment updated:', appointmentData);
+    });
+
+    // Listen for queue updates
+    socketService.onQueueUpdated((queueData: any) => {
+      if (trackedAppointment && trackedAppointment.doctorId === queueData.doctorId) {
+        setTrackedAppointment(prev => prev ? { ...prev, queueNumber: queueData.currentQueue } : null);
+      }
+      console.log('📊 Queue updated:', queueData);
+    });
+
+    return () => {
+      socketService.off('appointment_updated');
+      socketService.off('queue_updated');
+    };
+  }, [currentUser, trackedAppointment]);
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -57,6 +126,11 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   // Cancellation Modal State
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [selectedAptIdCancel, setSelectedAptIdCancel] = useState<string | null>(null);
+
+  // Review Modal State
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [reviewDoctorId, setReviewDoctorId] = useState<number | null>(null);
+  const [reviewAppointmentId, setReviewAppointmentId] = useState<number | null>(null);
 
   // Settings Internal State
   const [activeSettingsTab, setActiveSettingsTab] = useState<'PROFILE' | 'SECURITY' | 'NOTIFICATIONS' | 'PRIVACY'>('PROFILE');
@@ -93,11 +167,11 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   // Filter Data Population
   const cities = ['All Cities', 'Dhaka', 'Chittagong', 'Sylhet'];
   const areas = ['All Areas', 'Dhanmondi', 'Gulshan', 'Banani', 'Uttara', 'Mirpur', 'Panthapath', 'Bakshibazar', 'Bashundhara R/A'];
-  const hospitals = ['All Hospitals', ...Array.from(new Set(MOCK_DOCTORS.map(d => d.hospital)))];
-  const specialties = ['All Specialties', ...Array.from(new Set(MOCK_DOCTORS.map(d => d.specialization)))];
+  const hospitals = ['All Hospitals', ...Array.from(new Set(doctors.map(d => d.hospital)))];
+  const specialties = ['All Specialties', ...Array.from(new Set(doctors.map(d => d.specialization)))];
 
   // Logic: Filtering Doctors
-  const filteredDoctors = MOCK_DOCTORS.filter(doc => {
+  const filteredDoctors = doctors.filter(doc => {
     const matchesSearch = doc.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           doc.hospital.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCity = selectedCity === 'All Cities' || doc.location.includes(selectedCity);
@@ -119,21 +193,35 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
       setIsBookingModalOpen(true);
   };
 
-  const handleConfirmBooking = () => {
-      const newApt: Appointment = {
-          id: `new-${Date.now()}`,
+  const handleConfirmBooking = async () => {
+      try {
+        const appointmentData = {
+          doctorId: bookingDoctor!.id,
+          appointmentDate: selectedDate,
+          appointmentTime: selectedTime,
+          consultationType: bookingType === 'Telemedicine' ? 'ONLINE' : 'PHYSICAL',
+          symptoms: symptomInput || 'General checkup'
+        };
+
+        const newApt = await api.createAppointment(appointmentData);
+        
+        // Add to local state
+        setAppointments(prev => [...prev, {
+          id: newApt.id.toString(),
           doctorName: bookingDoctor!.name,
           patientName: settingsForm.name,
           date: selectedDate,
           time: selectedTime,
           type: bookingType,
           status: AppointmentStatus.CONFIRMED,
-          queueNumber: Math.floor(Math.random() * 20) + 10
-      };
-      // Push to mock data so it persists when switching views
-      MOCK_APPOINTMENTS.push(newApt);
-      setAppointments(prev => [...prev, newApt]);
-      setBookingStep(3); 
+          queueNumber: newApt.queueNumber || Math.floor(Math.random() * 20) + 10
+        }]);
+        
+        setBookingStep(3);
+      } catch (err: any) {
+        console.error('Error creating appointment:', err);
+        alert(err.message || 'Failed to book appointment. Please try again.');
+      }
   };
 
   const handleSymptomAnalysis = async () => {
@@ -152,7 +240,21 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
       if (apt.status === AppointmentStatus.CANCELLED || apt.status === AppointmentStatus.COMPLETED) return;
       setTrackedAppointment(apt);
       setIsQueueModalOpen(true);
+      
+      // Join queue room for real-time updates
+      if ((apt as any).doctorId) {
+        socketService.joinQueue((apt as any).doctorId);
+      }
   }
+
+  // Handle queue modal close
+  const closeQueueModal = () => {
+      if (trackedAppointment && (trackedAppointment as any).doctorId) {
+        socketService.leaveQueue((trackedAppointment as any).doctorId);
+      }
+      setIsQueueModalOpen(false);
+      setTrackedAppointment(null);
+  };
 
   const handleCancelClick = (e: React.MouseEvent, id: string) => {
       e.stopPropagation();
@@ -160,26 +262,59 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
       setIsCancelModalOpen(true);
   };
 
-  const confirmCancel = () => {
+  const confirmCancel = async () => {
       if (selectedAptIdCancel) {
-          const mockIndex = MOCK_APPOINTMENTS.findIndex(a => a.id === selectedAptIdCancel);
-          if (mockIndex >= 0) {
-              MOCK_APPOINTMENTS[mockIndex].status = AppointmentStatus.CANCELLED;
+          try {
+              await api.updateAppointment(selectedAptIdCancel, { status: 'CANCELLED' });
+              
+              setAppointments(prev => prev.map(apt => 
+                  apt.id === selectedAptIdCancel ? { ...apt, status: AppointmentStatus.CANCELLED } : apt
+              ));
+          } catch (err: any) {
+              console.error('Error cancelling appointment:', err);
+              alert(err.message || 'Failed to cancel appointment');
           }
-          setAppointments(prev => prev.map(apt => 
-              apt.id === selectedAptIdCancel ? { ...apt, status: AppointmentStatus.CANCELLED } : apt
-          ));
       }
       setIsCancelModalOpen(false);
       setSelectedAptIdCancel(null);
   };
 
-  const saveSettings = () => {
+  const handleWriteReview = (appointment: Appointment) => {
+      // Extract doctor ID from appointment (assuming it's stored as doctorId)
+      const doctorId = (appointment as any).doctorId || 1; // Fallback to 1 if not available
+      setReviewDoctorId(doctorId);
+      setReviewAppointmentId(Number(appointment.id));
+      setIsReviewModalOpen(true);
+  };
+
+  const handleReviewSubmit = async () => {
+      // Refresh appointments to show updated review status
+      if (currentUser) {
+          try {
+              const appointmentsData = await api.getAppointments();
+              setAppointments(appointmentsData);
+          } catch (err) {
+              console.error('Error refreshing appointments:', err);
+          }
+      }
+      setIsReviewModalOpen(false);
+  };
+
+  const saveSettings = async () => {
       setIsSavingSettings(true);
-      setTimeout(() => {
-          setIsSavingSettings(false);
+      try {
+          await api.updateProfile({
+              name: settingsForm.name,
+              phone: settingsForm.phone,
+              email: settingsForm.email
+          });
           alert("Settings saved successfully!");
-      }, 1000);
+      } catch (err: any) {
+          console.error('Error saving settings:', err);
+          alert(err.message || 'Failed to save settings');
+      } finally {
+          setIsSavingSettings(false);
+      }
   };
 
   const getNext7Days = () => {
@@ -262,10 +397,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                    </div>
                 </div>
                 <div className="flex gap-3">
-                    <button className="p-2 text-slate-500 hover:bg-white hover:shadow-sm rounded-full relative transition-all">
-                        <Bell size={20} />
-                        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-                    </button>
+                    <NotificationBell />
                 </div>
           </div>
 
@@ -427,7 +559,21 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
               <div className="space-y-6 animate-fade-in pb-20">
                   <Card>
                     <div className="space-y-4">
-                      {appointments.length > 0 ? (
+                      {isLoadingAppointments ? (
+                        // Loading skeleton
+                        Array.from({ length: 3 }).map((_, i) => (
+                          <div key={i} className="flex items-center justify-between p-5 bg-white rounded-xl border border-slate-100 animate-pulse">
+                            <div className="flex items-center gap-5">
+                              <div className="w-14 h-14 rounded-full bg-slate-200"></div>
+                              <div className="space-y-2">
+                                <div className="h-4 bg-slate-200 rounded w-32"></div>
+                                <div className="h-3 bg-slate-200 rounded w-24"></div>
+                              </div>
+                            </div>
+                            <div className="h-6 bg-slate-200 rounded w-20"></div>
+                          </div>
+                        ))
+                      ) : appointments.length > 0 ? (
                         appointments.map(apt => (
                           <div 
                             key={apt.id} 
@@ -453,7 +599,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                                        <span className="text-xs font-bold text-green-700">Live Queue</span>
                                    </div>
                                )}
-                               <Badge color={apt.status === AppointmentStatus.CONFIRMED ? 'green' : apt.status === AppointmentStatus.CANCELLED ? 'red' : 'yellow'}>{apt.status}</Badge>
+                               <Badge color={apt.status === AppointmentStatus.CONFIRMED ? 'green' : apt.status === AppointmentStatus.CANCELLED ? 'red' : apt.status === AppointmentStatus.COMPLETED ? 'blue' : 'yellow'}>{apt.status}</Badge>
                                
                                {(apt.status === AppointmentStatus.PENDING || apt.status === AppointmentStatus.CONFIRMED) && (
                                    <button 
@@ -461,6 +607,16 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                                        className="text-xs text-red-500 hover:text-red-700 font-medium hover:underline mt-1 px-2 py-1 rounded hover:bg-red-50 transition-colors"
                                    >
                                        Cancel Appointment
+                                   </button>
+                               )}
+                               
+                               {apt.status === AppointmentStatus.COMPLETED && (
+                                   <button 
+                                       onClick={(e) => { e.stopPropagation(); handleWriteReview(apt); }}
+                                       className="text-xs text-primary-600 hover:text-primary-800 font-medium hover:underline mt-1 px-2 py-1 rounded hover:bg-primary-50 transition-colors flex items-center gap-1"
+                                   >
+                                       <Star size={12} />
+                                       Write Review
                                    </button>
                                )}
                             </div>
@@ -477,7 +633,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                   </Card>
 
                   {/* Queue Modal & Cancel Modal (Same as before) */}
-                  <Modal isOpen={isQueueModalOpen} onClose={() => setIsQueueModalOpen(false)} title="Smart Live Queue">
+                  <Modal isOpen={isQueueModalOpen} onClose={closeQueueModal} title="Smart Live Queue">
                      {/* ... Queue Logic ... */}
                      {trackedAppointment && (
                           <div className="space-y-8 text-center pb-4">
@@ -500,6 +656,16 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                         </div>
                      </div>
                   </Modal>
+
+                  {/* Review Modal */}
+                  {isReviewModalOpen && reviewDoctorId && reviewAppointmentId && (
+                      <ReviewModal
+                          doctorId={reviewDoctorId}
+                          appointmentId={reviewAppointmentId}
+                          onClose={() => setIsReviewModalOpen(false)}
+                          onSubmitSuccess={handleReviewSubmit}
+                      />
+                  )}
               </div>
           )}
 
@@ -580,7 +746,28 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
 
                 {/* Results Grid - UPDATED DOCTOR CARD */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {filteredDoctors.map(doctor => (
+                  {isLoadingDoctors ? (
+                    // Loading skeleton
+                    Array.from({ length: 8 }).map((_, i) => (
+                      <div key={i} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden animate-pulse">
+                        <div className="h-48 bg-slate-200"></div>
+                        <div className="p-5 space-y-3">
+                          <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                          <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                          <div className="space-y-2">
+                            <div className="h-2 bg-slate-200 rounded"></div>
+                            <div className="h-2 bg-slate-200 rounded"></div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : filteredDoctors.length === 0 ? (
+                    <div className="col-span-full text-center py-12">
+                      <AlertCircle className="mx-auto mb-4 text-slate-300" size={48} />
+                      <p className="text-slate-500">No doctors found matching your criteria</p>
+                    </div>
+                  ) : (
+                    filteredDoctors.map(doctor => (
                     <div key={doctor.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden group flex flex-col">
                       {/* Doctor Image Header */}
                       <div className="h-48 overflow-hidden relative bg-slate-100">
@@ -629,7 +816,8 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                           </div>
                       </div>
                     </div>
-                  ))}
+                  ))
+                  )}
                 </div>
               </section>
 
@@ -668,22 +856,11 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                                       </ul>
                                   </div>
                                    <div>
-                                      <p className="font-bold text-slate-700 mb-1">Patient Reviews</p>
-                                      {bookingDoctor.reviews.length > 0 ? (
-                                          <div className="space-y-2">
-                                              {bookingDoctor.reviews.slice(0, 2).map(r => (
-                                                  <div key={r.id} className="bg-white p-2 rounded border border-slate-100">
-                                                      <div className="flex justify-between text-xs mb-1">
-                                                          <span className="font-bold">{r.patientName}</span>
-                                                          <span className="text-yellow-500">{r.rating} ★</span>
-                                                      </div>
-                                                      <p className="text-slate-500 text-xs italic">"{r.comment}"</p>
-                                                  </div>
-                                              ))}
-                                          </div>
-                                      ) : (
-                                          <p className="text-slate-400 italic">No reviews yet.</p>
-                                      )}
+                                      <p className="font-bold text-slate-700 mb-1 flex items-center gap-2">
+                                          <Star size={16} className="text-yellow-500" />
+                                          Patient Reviews
+                                      </p>
+                                      <DoctorReviews doctorId={bookingDoctor.id} limit={2} compact={true} />
                                   </div>
                               </div>
                          </div>

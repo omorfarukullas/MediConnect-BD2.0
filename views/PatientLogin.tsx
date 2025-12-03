@@ -1,34 +1,43 @@
 
 import React, { useState } from 'react';
-import { User, Lock, ArrowLeft, AlertCircle, Phone } from 'lucide-react';
+import { User, Lock, ArrowLeft, AlertCircle, Mail } from 'lucide-react';
 import { Button, Card } from '../components/UIComponents';
+import { api } from '../services/apiClient';
 
 interface PatientLoginProps {
   onBack: () => void;
-  onLoginSuccess: (email: string) => void;
+  onLoginSuccess: (userData: any) => void;
   onRegisterClick: () => void;
 }
 
 export const PatientLogin: React.FC<PatientLoginProps> = ({ onBack, onLoginSuccess, onRegisterClick }) => {
-  const [identifier, setIdentifier] = useState(''); // Email or Phone
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    // Simulate Network Delay and Auth
-    setTimeout(() => {
-      if (identifier && password.length >= 4) {
-         onLoginSuccess(identifier);
-      } else {
-         setError('Invalid credentials. Please try again.');
-         setIsLoading(false);
+    try {
+      // Call real API
+      const response = await api.login(email, password);
+      
+      // Check if user is a patient
+      if (response.role !== 'PATIENT') {
+        setError('This portal is for patients only. Please use the correct login page.');
+        setIsLoading(false);
+        return;
       }
-    }, 1000);
+
+      // Success - pass user data to parent
+      onLoginSuccess(response);
+    } catch (err: any) {
+      setError(err.message || 'Invalid email or password. Please try again.');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -55,16 +64,16 @@ export const PatientLogin: React.FC<PatientLoginProps> = ({ onBack, onLoginSucce
                 )}
 
                 <div>
-                   <label className="block text-sm font-medium text-slate-700 mb-1">Mobile Number or Email</label>
+                   <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
                    <div className="relative">
-                      <Phone className="absolute left-3 top-3 text-slate-400" size={16} />
+                      <Mail className="absolute left-3 top-3 text-slate-400" size={16} />
                       <input 
-                         type="text" 
+                         type="email" 
                          required
                          className="w-full pl-10 p-2.5 rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                         placeholder="017..."
-                         value={identifier}
-                         onChange={(e) => setIdentifier(e.target.value)}
+                         placeholder="you@example.com"
+                         value={email}
+                         onChange={(e) => setEmail(e.target.value)}
                       />
                    </div>
                 </div>
@@ -76,6 +85,7 @@ export const PatientLogin: React.FC<PatientLoginProps> = ({ onBack, onLoginSucce
                       <input 
                          type="password" 
                          required
+                         minLength={6}
                          className="w-full pl-10 p-2.5 rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                          placeholder="••••••••"
                          value={password}

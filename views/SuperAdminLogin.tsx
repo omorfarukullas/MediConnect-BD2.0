@@ -2,10 +2,11 @@
 import React, { useState } from 'react';
 import { Shield, Lock, ArrowLeft, AlertCircle, KeyRound } from 'lucide-react';
 import { Button, Card } from '../components/UIComponents';
+import { api } from '../services/apiClient';
 
 interface SuperAdminLoginProps {
   onBack: () => void;
-  onLoginSuccess: (email: string) => void;
+  onLoginSuccess: (userData: any) => void;
 }
 
 export const SuperAdminLogin: React.FC<SuperAdminLoginProps> = ({ onBack, onLoginSuccess }) => {
@@ -14,21 +15,28 @@ export const SuperAdminLogin: React.FC<SuperAdminLoginProps> = ({ onBack, onLogi
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    // Simulate Network Delay and Auth
-    setTimeout(() => {
-      // Mock Credential Check
-      if (email === 'admin@system.com' && password === 'admin123') {
-         onLoginSuccess(email);
-      } else {
-         setError('Invalid system credentials. Access denied.');
-         setIsLoading(false);
+    try {
+      // Call real API
+      const response = await api.login(email, password);
+      
+      // Check if user is a super admin
+      if (response.role !== 'SUPER_ADMIN') {
+        setError('Access denied. Super Admin credentials required.');
+        setIsLoading(false);
+        return;
       }
-    }, 1500);
+
+      // Success - pass user data to parent
+      onLoginSuccess(response);
+    } catch (err: any) {
+      setError(err.message || 'Invalid credentials. Access denied.');
+      setIsLoading(false);
+    }
   };
 
   return (

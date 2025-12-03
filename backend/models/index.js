@@ -5,10 +5,16 @@ const Hospital = require('./Hospital');
 const Appointment = require('./Appointment');
 const Ambulance = require('./Ambulance');
 
-// Import New Models
+// Import Medical Records Models
 const Prescription = require('./Prescription');
 const MedicalReport = require('./MedicalReport');
 const Vitals = require('./Vitals');
+
+// Import New Feature Models
+const Review = require('./Review');
+const DoctorSchedule = require('./DoctorSchedule');
+const Notification = require('./Notification');
+const MedicalDocument = require('./MedicalDocument');
 
 // --- Relationships ---
 
@@ -44,6 +50,27 @@ MedicalReport.belongsTo(User, { foreignKey: 'patientId' });
 User.hasOne(Vitals, { foreignKey: 'userId' });
 Vitals.belongsTo(User, { foreignKey: 'userId' });
 
+// --- REVIEWS RELATIONSHIPS ---
+// Patient writes reviews
+User.hasMany(Review, { foreignKey: 'patientId', as: 'writtenReviews' });
+Review.belongsTo(User, { foreignKey: 'patientId', as: 'patient' });
+
+// Doctor receives reviews
+Doctor.hasMany(Review, { foreignKey: 'doctorId', as: 'reviews' });
+Review.belongsTo(Doctor, { foreignKey: 'doctorId', as: 'doctor' });
+
+// --- DOCTOR SCHEDULE RELATIONSHIPS ---
+Doctor.hasMany(DoctorSchedule, { foreignKey: 'doctorId', as: 'schedules' });
+DoctorSchedule.belongsTo(Doctor, { foreignKey: 'doctorId', as: 'doctor' });
+
+// --- NOTIFICATION RELATIONSHIPS ---
+User.hasMany(Notification, { foreignKey: 'userId', as: 'notifications' });
+Notification.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
+// --- MEDICAL DOCUMENT RELATIONSHIPS ---
+User.hasMany(MedicalDocument, { foreignKey: 'userId', as: 'documents' });
+MedicalDocument.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
 module.exports = {
     sequelize,
     User,
@@ -53,5 +80,9 @@ module.exports = {
     Ambulance,
     Prescription,
     MedicalReport,
-    Vitals
+    Vitals,
+    Review,
+    DoctorSchedule,
+    Notification,
+    MedicalDocument
 };

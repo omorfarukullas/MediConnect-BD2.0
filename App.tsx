@@ -59,22 +59,22 @@ const App = () => {
     }
   };
 
-  const handlePatientLoginSuccess = (identifier: string) => {
+  const handlePatientLoginSuccess = (userData: any) => {
      setCurrentUser({
-        id: 'u-patient-001',
-        name: identifier.includes('@') ? identifier.split('@')[0] : 'Rahim Uddin',
+        id: userData.id,
+        name: userData.name,
         role: UserRole.PATIENT,
-        email: identifier
+        email: userData.email
      });
      setCurrentView('patient');
   };
 
-  const handleDoctorLoginSuccess = (email: string) => {
+  const handleDoctorLoginSuccess = (userData: any) => {
      setCurrentUser({
-        id: 'u-doctor-001',
-        name: 'Dr. Omor Faruck',
+        id: userData.id,
+        name: userData.name,
         role: UserRole.DOCTOR,
-        email: email
+        email: userData.email
      });
      setCurrentView('doctor');
   };
@@ -90,12 +90,12 @@ const App = () => {
      setCurrentView('admin');
   };
 
-  const handleSuperAdminLoginSuccess = (email: string) => {
+  const handleSuperAdminLoginSuccess = (userData: any) => {
     setCurrentUser({
-        id: 'super-admin-001',
-        name: 'System Owner',
-        role: UserRole.SUPER_ADMIN,
-        email: email
+        id: userData.id,
+        name: userData.name,
+        role: userData.role,
+        email: userData.email
     });
     setCurrentView('super_admin');
   }

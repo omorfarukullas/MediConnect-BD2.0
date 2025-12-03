@@ -2,8 +2,7 @@
 import React, { useState } from 'react';
 import { Building2, Lock, ArrowLeft, AlertCircle } from 'lucide-react';
 import { Button, Card } from '../components/UIComponents';
-import { MOCK_HOSPITALS } from '../constants';
-import { UserRole } from '../types';
+import { api } from '../services/apiClient';
 
 interface HospitalLoginProps {
   onBack: () => void;
@@ -16,30 +15,29 @@ export const HospitalLogin: React.FC<HospitalLoginProps> = ({ onBack, onLoginSuc
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    // Simulate Network Delay
-    setTimeout(() => {
-      // Mock Authentication Logic
-      // In a real app, this would hit a backend API
-      const lowerEmail = email.toLowerCase();
+    try {
+      // Call real API
+      const response = await api.login(email, password);
       
-      let matchedHospitalId = '';
-
-      if (lowerEmail.includes('square')) matchedHospitalId = 'h1';
-      else if (lowerEmail.includes('dhaka') || lowerEmail.includes('dmc')) matchedHospitalId = 'h2';
-      else if (lowerEmail.includes('united')) matchedHospitalId = 'h3';
-      
-      if (matchedHospitalId && password.length >= 4) {
-         onLoginSuccess(matchedHospitalId, email);
-      } else {
-         setError('Invalid credentials. Try "admin@square.com" with any password.');
-         setIsLoading(false);
+      // Check if user is a hospital admin
+      if (response.role !== 'ADMIN') {
+        setError('This portal is for hospital administrators only.');
+        setIsLoading(false);
+        return;
       }
-    }, 1000);
+
+      // Success - pass hospital ID and email to parent
+      // For now, use user ID as hospital ID (update when hospitalId field is added)
+      onLoginSuccess(response.hospitalId || response.id, response.email);
+    } catch (err: any) {
+      setError(err.message || 'Invalid email or password.');
+      setIsLoading(false);
+    }
   };
 
   return (

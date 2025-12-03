@@ -1,12 +1,79 @@
 
-import React, { useState } from 'react';
-import { FileText, Calendar, Activity, Pill, Download, Eye, ArrowLeft, Clock, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { FileText, Calendar, Activity, Pill, Download, Eye, ArrowLeft, Clock, AlertCircle, Upload, Trash2, File } from 'lucide-react';
 import { Card, Button, Badge } from '../components/UIComponents';
+import { FileUpload } from '../components/FileUpload';
+import { api } from '../services/apiClient';
 import { MOCK_VITALS, MOCK_PRESCRIPTIONS, MOCK_REPORTS, MOCK_APPOINTMENTS } from '../constants';
 import { AppointmentStatus } from '../types';
 
 export const MedicalHistory = ({ onBack }: { onBack: () => void }) => {
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'PRESCRIPTIONS' | 'REPORTS' | 'VISITS'>('OVERVIEW');
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'PRESCRIPTIONS' | 'REPORTS' | 'VISITS' | 'DOCUMENTS'>('OVERVIEW');
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'DOCUMENTS') {
+      fetchDocuments();
+    }
+  }, [activeTab]);
+
+  const fetchDocuments = async () => {
+    try {
+      setLoadingDocuments(true);
+      const docs = await api.getDocuments();
+      setDocuments(docs);
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
+  const handleUploadSuccess = (document: any) => {
+    setDocuments(prev => [document, ...prev]);
+  };
+
+  const handleDeleteDocument = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this document?')) return;
+    
+    try {
+      await api.deleteDocument(id);
+      setDocuments(prev => prev.filter(doc => doc.id !== id));
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Failed to delete document');
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B';
+    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    else return (bytes / 1048576).toFixed(1) + ' MB';
+  };
+
+  const getDocumentTypeLabel = (type: string): string => {
+    const labels: any = {
+      'PRESCRIPTION': 'Prescription',
+      'LAB_REPORT': 'Lab Report',
+      'MEDICAL_REPORT': 'Medical Report',
+      'XRAY': 'X-Ray',
+      'SCAN': 'Scan',
+      'OTHER': 'Other'
+    };
+    return labels[type] || type;
+  };
+
+  const getDocumentTypeColor = (type: string): string => {
+    const colors: any = {
+      'PRESCRIPTION': 'blue',
+      'LAB_REPORT': 'green',
+      'MEDICAL_REPORT': 'purple',
+      'XRAY': 'orange',
+      'SCAN': 'red',
+      'OTHER': 'gray'
+    };
+    return colors[type] || 'gray';
+  };
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
@@ -17,6 +84,7 @@ export const MedicalHistory = ({ onBack }: { onBack: () => void }) => {
         <TabButton active={activeTab === 'PRESCRIPTIONS'} onClick={() => setActiveTab('PRESCRIPTIONS')} icon={<Pill size={16}/>} label="Prescriptions" />
         <TabButton active={activeTab === 'REPORTS'} onClick={() => setActiveTab('REPORTS')} icon={<FileText size={16}/>} label="Lab Reports" />
         <TabButton active={activeTab === 'VISITS'} onClick={() => setActiveTab('VISITS')} icon={<Calendar size={16}/>} label="Visit History" />
+        <TabButton active={activeTab === 'DOCUMENTS'} onClick={() => setActiveTab('DOCUMENTS')} icon={<Upload size={16}/>} label="My Documents" />
       </div>
 
       {/* Tab Content */}
@@ -155,6 +223,105 @@ export const MedicalHistory = ({ onBack }: { onBack: () => void }) => {
                  </div>
               ))}
            </div>
+        )}
+
+        {activeTab === 'DOCUMENTS' && (
+          <div className="space-y-6">
+            {/* Upload Section */}
+            <Card>
+              <h3 className="font-bold text-lg text-slate-900 mb-4 flex items-center gap-2">
+                <Upload className="text-primary-600"/> Upload New Document
+              </h3>
+              <FileUpload 
+                onUploadSuccess={handleUploadSuccess}
+                onUploadError={(error) => alert(error)}
+              />
+            </Card>
+
+            {/* Documents List */}
+            <div>
+              <h3 className="font-bold text-lg text-slate-900 mb-4 flex items-center gap-2">
+                <FileText className="text-primary-600"/> My Documents
+                {loadingDocuments && <span className="text-sm font-normal text-slate-500">(Loading...)</span>}
+              </h3>
+              
+              {loadingDocuments ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="bg-white border border-slate-200 rounded-xl p-4 animate-pulse">
+                      <div className="h-6 bg-slate-200 rounded w-3/4 mb-2"></div>
+                      <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : documents.length === 0 ? (
+                <div className="text-center py-16 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                  <FileText size={48} className="mx-auto text-slate-300 mb-4" />
+                  <p className="text-slate-500 font-medium">No documents uploaded yet.</p>
+                  <p className="text-sm text-slate-400 mt-2">Upload your medical reports, prescriptions, and other documents above.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {documents.map(doc => (
+                    <Card key={doc.id} className="hover:border-primary-200 transition-colors">
+                      <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
+                          <File size={24} className="text-primary-600" />
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-slate-900 truncate">{doc.filename}</h4>
+                          <div className="flex flex-wrap gap-2 mt-1 mb-2">
+                            <Badge color={getDocumentTypeColor(doc.documentType)}>
+                              {getDocumentTypeLabel(doc.documentType)}
+                            </Badge>
+                            <span className="text-xs text-slate-400">
+                              {formatFileSize(doc.size)}
+                            </span>
+                          </div>
+                          {doc.description && (
+                            <p className="text-sm text-slate-600 mt-2">{doc.description}</p>
+                          )}
+                          <p className="text-xs text-slate-400 mt-2">
+                            Uploaded {new Date(doc.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2 mt-4">
+                        <Button 
+                          variant="outline" 
+                          className="flex-1 text-sm"
+                          onClick={() => window.open(`http://localhost:5000/${doc.filepath}`, '_blank')}
+                        >
+                          <Eye size={16} className="mr-2"/> View
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          className="flex-1 text-sm"
+                          onClick={() => {
+                            const link = document.createElement('a');
+                            link.href = `http://localhost:5000/${doc.filepath}`;
+                            link.download = doc.filename;
+                            link.click();
+                          }}
+                        >
+                          <Download size={16} className="mr-2"/> Download
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          className="text-sm text-red-600 hover:bg-red-50"
+                          onClick={() => handleDeleteDocument(doc.id)}
+                        >
+                          <Trash2 size={16} />
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>

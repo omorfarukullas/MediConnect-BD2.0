@@ -2,10 +2,11 @@
 import React, { useState } from 'react';
 import { Stethoscope, Lock, ArrowLeft, AlertCircle, Mail } from 'lucide-react';
 import { Button, Card } from '../components/UIComponents';
+import { api } from '../services/apiClient';
 
 interface DoctorLoginProps {
   onBack: () => void;
-  onLoginSuccess: (email: string) => void;
+  onLoginSuccess: (userData: any) => void;
   onRegisterClick: () => void;
 }
 
@@ -15,21 +16,28 @@ export const DoctorLogin: React.FC<DoctorLoginProps> = ({ onBack, onLoginSuccess
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    // Simulate Network Delay and Auth
-    setTimeout(() => {
-      if (email && password.length >= 4) {
-         // Mock successful login
-         onLoginSuccess(email);
-      } else {
-         setError('Invalid credentials. Please try again.');
-         setIsLoading(false);
+    try {
+      // Call real API
+      const response = await api.login(email, password);
+      
+      // Check if user is a doctor
+      if (response.role !== 'DOCTOR') {
+        setError('This portal is for doctors only. Please use the correct login page.');
+        setIsLoading(false);
+        return;
       }
-    }, 1000);
+
+      // Success - pass user data to parent
+      onLoginSuccess(response);
+    } catch (err: any) {
+      setError(err.message || 'Invalid email or password. Please try again.');
+      setIsLoading(false);
+    }
   };
 
   return (
