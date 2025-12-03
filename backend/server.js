@@ -14,6 +14,7 @@ const appointmentRoutes = require('./routes/appointmentRoutes');
 const emergencyRoutes = require('./routes/emergencyRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const documentRoutes = require('./routes/documentRoutes');
 
 dotenv.config();
 
@@ -23,6 +24,8 @@ const server = http.createServer(app);
 // Middleware
 app.use(cors());
 app.use(express.json());
+// Serve uploaded files statically
+app.use('/uploads', express.static('uploads'));
 
 // Health check route
 app.get('/api/health', (req, res) => {
@@ -40,6 +43,8 @@ app.use('/api/appointments', appointmentRoutes);
 app.use('/api/emergency', emergencyRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/notifications', notificationRoutes);
+// Document management routes (file uploads)
+app.use('/api/documents', documentRoutes);
 
 // Socket.io with authentication
 const io = new Server(server, {
