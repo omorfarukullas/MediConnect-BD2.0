@@ -93,19 +93,19 @@ The system employs a **decoupled, 3-Tier Architecture** to ensure security, scal
 
 ```mermaid
 graph TD;
-    subgraph "Clients"
-        A[Web Frontend - React+Vite]
-        B[Mobile App - Flutter (Future)]
+    subgraph Clients
+        A[Web Frontend <br> React+Vite]
+        B[Mobile App <br> Flutter (Future)]
     end
 
     subgraph "Backend Services"
-        C[API Server - Express.js/Node.js]
-        D[WebSocket Server - Socket.IO]
+        C[API Server <br> Express.js/Node.js]
+        D[WebSocket Server <br> Socket.IO]
     end
 
     subgraph "Data & Storage Layer"
-        E[Database - MySQL]
-        F[File Storage - Local/S3]
+        E[Database <br> MySQL]
+        F[File Storage <br> Local/S3]
     end
 
     A -- "REST API (HTTPS/JSON)" --> C;
