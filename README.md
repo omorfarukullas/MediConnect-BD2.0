@@ -185,15 +185,42 @@ graph TD;
     - Configure your database credentials in `backend/.env` (see [Environment Variables](#-environment-variables)).
     - The server will automatically sync the Sequelize models to create the necessary tables on first run.
 
+5.  **Create uploads directory (required for file uploads):**
+    ```powershell
+    # Windows PowerShell
+    cd backend
+    mkdir uploads
+    cd ..
+    ```
+    ```bash
+    # Linux/macOS
+    mkdir -p backend/uploads
+    chmod 750 backend/uploads
+    ```
+
+### First-Run Checklist
+
+Before starting the application for the first time, ensure:
+- ✅ MySQL database `mediconnect` is created
+- ✅ `backend/.env` file exists with correct credentials and `DB_PORT=3307`
+- ✅ `backend/uploads/` directory exists
+- ✅ Backend dependencies installed: `cd backend && npm install`
+- ✅ Frontend dependencies installed: `npm install` (from root)
+- ✅ `socket.io-client` is installed: `npm install socket.io-client` (from root)
+
 ### Running the Application
 
 The application requires two terminals to run both the backend and frontend servers concurrently.
 
 **Terminal 1: Start the Backend Server**
-```bash
+```powershell
 cd backend
-npm start 
-# Or for development with nodemon: npm run dev
+
+# Option 1: Direct execution (production)
+node server.js
+
+# Option 2: Development mode with auto-reload (if nodemon is configured)
+npm run dev
 ```
 The backend API and WebSocket server will be running at `http://localhost:5000`.
 
@@ -265,7 +292,7 @@ DB_HOST=localhost
 DB_USER=your_mysql_user
 DB_PASS=your_mysql_password
 DB_NAME=mediconnect
-DB_PORT=3306
+DB_PORT=3307  # Change to 3306 if your MySQL uses the default port
 
 # JWT Secret
 JWT_SECRET=your_super_secret_jwt_key
