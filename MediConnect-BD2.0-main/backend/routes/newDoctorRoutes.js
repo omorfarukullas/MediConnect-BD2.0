@@ -5,19 +5,48 @@ const { Op } = require('sequelize');
 
 // ===== GET ALL DOCTORS =====
 router.get('/', async (req, res) => {
+    console.log('🔍 [API] GET /v2/doctors - Fetching all doctors');
     try {
         const doctors = await DoctorNew.findAll({
-            attributes: ['id', 'full_name', 'email', 'phone', 'city', 'specialization', 'created_at']
+            attributes: ['id', 'full_name', 'email', 'phone', 'city', 'specialization', 'hospital', 'visit_fee', 'created_at'],
+            order: [['created_at', 'DESC']]
+        });
+        
+        console.log(`✅ [API] Found ${doctors.length} doctors in database`);
+
+        // Transform to match frontend DoctorResponse interface
+        const transformedDoctors = doctors.map(doc => {
+            const visitFee = parseFloat(doc.visit_fee) || 500;
+            const onlineFee = Math.round(visitFee * 0.8); // 20% discount for online
+            
+            return {
+                id: doc.id,
+                name: doc.full_name,
+                email: doc.email,
+                phone: doc.phone,
+                city: doc.city,
+                specialization: doc.specialization,
+                hospital: doc.hospital,
+                bmdcNumber: doc.bmdcNumber || '',
+                fees: {
+                    online: onlineFee,
+                    physical: visitFee
+                },
+                image: `https://ui-avatars.com/api/?name=${encodeURIComponent(doc.full_name)}&background=random`,
+                rating: 4.5,
+                experienceYears: 5
+            };
         });
 
-        res.json({
-            success: true,
-            count: doctors.length,
-            doctors
-        });
+        console.log('💰 [API] Sample fee data:', transformedDoctors[0]?.fees);
+        res.json(transformedDoctors);
     } catch (error) {
-        console.error('Get doctors error:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        console.error('❌ [API] Get doctors error:', error);
+        res.status(500).json({ 
+            success: false,
+            message: 'Server error', 
+            error: error.message 
+        });
     }
 });
 
@@ -42,7 +71,7 @@ router.get('/search', async (req, res) => {
 
         const doctors = await DoctorNew.findAll({
             where: whereClause,
-            attributes: ['id', 'full_name', 'email', 'phone', 'city', 'specialization', 'created_at']
+            attributes: ['id', 'full_name', 'email', 'phone', 'city', 'specialization', 'hospital', 'visit_fee', 'created_at']
         });
 
         res.json({

@@ -135,17 +135,31 @@ router.get('/doctor/:doctorId', async (req, res) => {
 });
 
 // ===== UPDATE APPOINTMENT STATUS =====
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', protect, async (req, res) => {
     try {
         const { status } = req.body;
         
-        if (!['PENDING', 'ACCEPTED', 'REJECTED', 'COMPLETED'].includes(status)) {
-            return res.status(400).json({ message: 'Invalid status value' });
+        if (!['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED'].includes(status)) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Invalid status value. Allowed: PENDING, CONFIRMED, CANCELLED, COMPLETED' 
+            });
         }
 
         const appointment = await AppointmentNew.findByPk(req.params.id);
         if (!appointment) {
-            return res.status(404).json({ message: 'Appointment not found' });
+            return res.status(404).json({ 
+                success: false,
+                message: 'Appointment not found' 
+            });
+        }
+
+        // Authorization: Only patient or doctor can update
+        if (req.user.role === 'patient' && appointment.patient_id !== req.user.id) {
+            return res.status(403).json({
+                success: false,
+                message: 'Unauthorized: You can only update your own appointments'
+            });
         }
 
         appointment.status = status;
@@ -158,32 +172,58 @@ router.patch('/:id/status', async (req, res) => {
             ]
         });
 
+        console.log(`✅ Appointment ${appointment.id} status updated to ${status}`);
+
         res.json({
+            success: true,
             message: 'Appointment status updated successfully',
             appointment: updatedAppointment
         });
     } catch (error) {
         console.error('Update appointment status error:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ 
+            success: false,
+            message: 'Server error', 
+            error: error.message 
+        });
     }
 });
 
-// ===== DELETE APPOINTMENT =====
-router.delete('/:id', async (req, res) => {
+// ===== DELETE APPOINTMENT (Admin Only - Use PATCH for cancellation) =====
+router.delete('/:id', protect, async (req, res) => {
     try {
         const appointment = await AppointmentNew.findByPk(req.params.id);
         if (!appointment) {
-            return res.status(404).json({ message: 'Appointment not found' });
+            return res.status(404).json({ 
+                success: false,
+                message: 'Appointment not found' 
+            });
         }
 
+        // Security: Only allow deletion for the patient who created it or admin
+        if (req.user.role !== 'admin' && appointment.patient_id !== req.user.id) {
+            return res.status(403).json({
+                success: false,
+                message: 'Unauthorized: You can only delete your own appointments'
+            });
+        }
+
+        // Safely delete the appointment (foreign keys are set to CASCADE)
         await appointment.destroy();
 
+        console.log(`🗑️ Appointment ${req.params.id} deleted by user ${req.user.id}`);
+
         res.json({
+            success: true,
             message: 'Appointment deleted successfully'
         });
     } catch (error) {
         console.error('Delete appointment error:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ 
+            success: false,
+            message: 'Server error', 
+            error: error.message 
+        });
     }
 });
 

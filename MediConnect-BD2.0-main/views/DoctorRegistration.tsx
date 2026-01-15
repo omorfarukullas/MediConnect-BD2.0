@@ -57,36 +57,54 @@ export const DoctorRegistration: React.FC<DoctorRegistrationProps> = ({ onBack, 
     setError('');
     setIsLoading(true);
     
+    console.log('📝 [Doctor Registration] Starting registration with form data:', {
+      fullName: formData.fullName,
+      email: formData.email,
+      phone: formData.phone,
+      specialization: formData.specialization,
+      hospital: formData.hospital
+    });
+    
     try {
-      // Validate password
+      // Validate required fields
+      if (!formData.fullName || !formData.email || !formData.password) {
+        setError('Please fill in all required fields');
+        setIsLoading(false);
+        return;
+      }
+
       if (formData.password.length < 6) {
         setError('Password must be at least 6 characters long');
         setIsLoading(false);
         return;
       }
 
-      // Call real API
-      await api.register({
-        name: formData.fullName,
+      if (!formData.phone || !formData.specialization) {
+        setError('Please complete professional information');
+        setIsLoading(false);
+        return;
+      }
+
+      // Call doctor-specific registration API with all fields
+      const registrationData = {
+        full_name: formData.fullName,
         email: formData.email,
-        phone: formData.phone,
         password: formData.password,
-        role: 'DOCTOR',
-        // Additional doctor fields - backend will store these
-        bmdcNumber: formData.bmdcNumber,
+        phone: formData.phone,
+        city: formData.hospital || 'Dhaka', // Use hospital as city for now
         specialization: formData.specialization,
-        subSpecialization: formData.subSpecialization,
-        experience: parseInt(formData.experience) || 0,
-        hospital: formData.hospital,
-        degrees: formData.degrees,
-        consultationFee: parseInt(formData.physicalFee) || 0,
-        gender: formData.gender,
-        dateOfBirth: formData.dob
-      });
+        hospital: formData.hospital || 'Private Practice',
+        visit_fee: parseFloat(formData.physicalFee) || 500
+      };
+
+      console.log('🚀 [Doctor Registration] Sending registration request...');
+      const response = await api.registerDoctor(registrationData);
+      console.log('✅ [Doctor Registration] Registration successful!', response);
 
       setIsLoading(false);
       setStep(6); // Success Step
     } catch (err: any) {
+      console.error('❌ [Doctor Registration] Registration failed:', err);
       setError(err.message || 'Registration failed. Please try again.');
       setIsLoading(false);
       setStep(1); // Go back to first step to show error

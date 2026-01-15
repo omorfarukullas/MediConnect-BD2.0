@@ -7,9 +7,9 @@ interface ReviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   doctorId: number;
-  doctorName: string;
+  doctorName?: string;
   appointmentId?: number;
-  onReviewSubmitted?: () => void;
+  onSubmitSuccess?: () => void;
 }
 
 export const ReviewModal: React.FC<ReviewModalProps> = ({
@@ -18,7 +18,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   doctorId,
   doctorName,
   appointmentId,
-  onReviewSubmitted
+  onSubmitSuccess
 }) => {
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
@@ -53,7 +53,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
       // Success
       setRating(0);
       setComment('');
-      onReviewSubmitted?.();
+      onSubmitSuccess?.();
       onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to submit review');
@@ -164,9 +164,11 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
 interface DoctorReviewsProps {
   doctorId: number;
   className?: string;
+  limit?: number;
+  compact?: boolean;
 }
 
-export const DoctorReviews: React.FC<DoctorReviewsProps> = ({ doctorId, className = '' }) => {
+export const DoctorReviews: React.FC<DoctorReviewsProps> = ({ doctorId, className = '', limit, compact = false }) => {
   const [reviews, setReviews] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [averageRating, setAverageRating] = useState(0);

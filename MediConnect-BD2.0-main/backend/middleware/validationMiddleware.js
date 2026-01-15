@@ -68,8 +68,11 @@ const validatePatientRegistration = (req, res, next) => {
 const validateDoctorRegistration = (req, res, next) => {
     const { full_name, email, password, phone, city, specialization } = req.body;
     
+    console.log('🔍 [Validation] Validating doctor registration:', { full_name, email, phone, city, specialization });
+    
     // Check required fields
     if (!full_name || !email || !password || !city || !specialization) {
+        console.log('❌ [Validation] Missing required fields');
         return res.status(400).json({ 
             success: false,
             message: 'Full name, email, password, city, and specialization are required' 
@@ -78,6 +81,7 @@ const validateDoctorRegistration = (req, res, next) => {
     
     // Validate email format
     if (!validateEmail(email)) {
+        console.log('❌ [Validation] Invalid email format');
         return res.status(400).json({ 
             success: false,
             message: 'Invalid email format. Please use a valid email address (e.g., doctor@hospital.com)' 
@@ -86,20 +90,23 @@ const validateDoctorRegistration = (req, res, next) => {
     
     // Validate phone if provided
     if (phone && !validatePhone(phone)) {
+        console.log('❌ [Validation] Invalid phone format');
         return res.status(400).json({ 
             success: false,
             message: 'Invalid phone number format. Use formats like: +1-555-1234 or (555) 123-4567' 
         });
     }
     
-    // Validate strong password
-    if (!validateStrongPassword(password)) {
+    // Relaxed password validation for doctors (min 6 characters)
+    if (password.length < 6) {
+        console.log('❌ [Validation] Password too short');
         return res.status(400).json({ 
             success: false,
-            message: 'Password must be at least 8 characters long and contain: uppercase letter, lowercase letter, number, and special character (!@#$%^&*...)' 
+            message: 'Password must be at least 6 characters long' 
         });
     }
     
+    console.log('✅ [Validation] Doctor registration data validated successfully');
     next();
 };
 

@@ -230,7 +230,7 @@ export const MOCK_AMBULANCES: Ambulance[] = [
 
 export const MOCK_APPOINTMENTS: Appointment[] = [
   {
-    id: 'apt1',
+    id: 1,
     patientName: 'Rahim Uddin',
     doctorName: 'Dr. Omor Faruck Ullas',
     date: '2023-10-27',
@@ -241,7 +241,7 @@ export const MOCK_APPOINTMENTS: Appointment[] = [
     symptoms: 'Chest pain and mild fever'
   },
   {
-    id: 'apt2',
+    id: 2,
     patientName: 'Karim Ahmed',
     doctorName: 'Dr. Omor Faruck Ullas',
     date: '2023-10-27',

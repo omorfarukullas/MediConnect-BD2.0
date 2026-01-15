@@ -33,6 +33,16 @@ const Patient = sequelize.define('Patient', {
     address: {
         type: DataTypes.TEXT
     },
+    blood_group: {
+        type: DataTypes.STRING(5),
+        allowNull: true,
+        field: 'blood_group'
+    },
+    profile_image: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        field: 'profile_image'
+    },
     created_at: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW,

@@ -8,11 +8,11 @@ export enum UserRole {
 }
 
 export enum AppointmentStatus {
-  PENDING = 'Pending',
-  CONFIRMED = 'Confirmed',
-  COMPLETED = 'Completed',
-  CANCELLED = 'Cancelled',
-  MISSED = 'Missed'
+  PENDING = 'PENDING',
+  CONFIRMED = 'CONFIRMED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+  MISSED = 'MISSED'
 }
 
 export interface User {
@@ -118,7 +118,9 @@ export interface Ambulance {
 }
 
 export interface Appointment {
-  id: string;
+  id: number;
+  patientId?: number;
+  doctorId?: number;
   patientName: string;
   doctorName: string;
   date: string;

@@ -21,20 +21,25 @@ export const DoctorLogin: React.FC<DoctorLoginProps> = ({ onBack, onLoginSuccess
     setError('');
     setIsLoading(true);
 
+    console.log('🔐 [Doctor Login] Attempting login for:', email);
+
     try {
-      // Call real API
-      const response = await api.login(email, password);
+      // Call unified login API
+      const response = await api.loginUnified(email, password);
       
       // Check if user is a doctor
       if (response.role !== 'DOCTOR') {
+        console.log('❌ [Doctor Login] User is not a doctor, role:', response.role);
         setError('This portal is for doctors only. Please use the correct login page.');
         setIsLoading(false);
         return;
       }
 
+      console.log('✅ [Doctor Login] Login successful');
       // Success - pass user data to parent
       onLoginSuccess(response);
     } catch (err: any) {
+      console.error('❌ [Doctor Login] Login failed:', err);
       setError(err.message || 'Invalid email or password. Please try again.');
       setIsLoading(false);
     }

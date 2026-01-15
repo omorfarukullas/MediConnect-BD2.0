@@ -39,6 +39,17 @@ const DoctorNew = sequelize.define('DoctorNew', {
         allowNull: false,
         comment: 'e.g., Cardiologist, Dermatologist, Pediatrician'
     },
+    hospital: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        comment: 'Hospital or clinic name where doctor practices'
+    },
+    visit_fee: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        defaultValue: 0,
+        comment: 'Consultation fee in BDT'
+    },
     created_at: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW,

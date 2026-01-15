@@ -46,20 +46,26 @@ export const PatientRegistration: React.FC<PatientRegistrationProps> = ({ onBack
 
     setIsLoading(true);
 
+    console.log('📝 [Patient Registration] Starting registration...');
+
     try {
-      // Call real API
-      const response = await api.register({
-        name: formData.name,
+      // Call patient registration API
+      const registrationData = {
+        full_name: formData.name,
         email: formData.email,
-        phone: formData.phone,
         password: formData.password,
-        role: 'PATIENT',
-        age: parseInt(formData.age)
-      });
+        phone: formData.phone || undefined,
+        address: formData.address || undefined
+      };
+
+      console.log('🚀 [Patient Registration] Sending registration request...');
+      const response = await api.registerPatient(registrationData);
+      console.log('✅ [Patient Registration] Registration successful!', response);
 
       // Success - pass user data to parent
       onRegisterSuccess(response);
     } catch (err: any) {
+      console.error('❌ [Patient Registration] Registration failed:', err);
       setError(err.message || 'Registration failed. Please try again.');
       setIsLoading(false);
     }

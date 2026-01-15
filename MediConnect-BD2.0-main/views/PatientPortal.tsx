@@ -1,15 +1,55 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Video, Calendar, Clock, AlertCircle, ArrowLeft, Filter, CheckCircle, User, Star, Activity, ChevronRight, AlertTriangle, Settings, Bell, Lock, Globe, Save, Mail, Phone, Shield, LogOut, ChevronLeft, GraduationCap, Languages, Menu, FileText, Home } from 'lucide-react';
-import { MOCK_DOCTORS, MOCK_APPOINTMENTS, MOCK_VITALS } from '../constants';
-import { Doctor, Appointment, AppointmentStatus, User as UserType, BookingDraft } from '../types';
+import { Search, MapPin, Video, Calendar, Clock, AlertCircle, ArrowLeft, Filter, CheckCircle, User, Star, Activity, ChevronRight, AlertTriangle, Settings, Bell, Lock, Globe, Save, Mail, Phone, Shield, LogOut, ChevronLeft, GraduationCap, Languages, Menu, FileText, Home, Upload } from 'lucide-react';
+import { Doctor, Appointment, AppointmentStatus, User as UserType, UserRole } from '../types';
 import { Button, Card, Badge, Modal } from '../components/UIComponents';
 import { analyzeSymptoms, AISymptomResponse } from '../services/geminiService';
 import { MedicalHistory } from './MedicalHistory';
-import { api } from '../services/apiClient';
+import { api, AppointmentResponse, DoctorResponse } from '../services/apiClient';
 import { NotificationBell } from '../components/NotificationBell';
 import { ReviewModal, DoctorReviews } from '../components/ReviewSystem';
 import { socketService } from '../services/socketService';
+
+// Helper function to map API response to frontend type
+const mapAppointmentResponse = (apiApt: AppointmentResponse): Appointment => ({
+  id: apiApt.id,
+  patientId: apiApt.patientId,
+  doctorId: apiApt.doctorId,
+  patientName: apiApt.patientName || 'Unknown',
+  doctorName: apiApt.doctorName || 'Unknown Doctor',
+  date: apiApt.appointmentDate,
+  time: apiApt.appointmentTime,
+  type: 'In-Person', // Default, API doesn't return this currently
+  status: apiApt.status as AppointmentStatus,
+  queueNumber: apiApt.queueNumber,
+  symptoms: apiApt.reasonForVisit
+});
+
+// Helper function to map Doctor API response to frontend Doctor type
+const mapDoctorResponse = (apiDoc: DoctorResponse): Doctor => ({
+  id: apiDoc.id.toString(),
+  name: apiDoc.name,
+  role: UserRole.DOCTOR,
+  email: apiDoc.email,
+  specialization: apiDoc.specialization,
+  hospital: apiDoc.city || 'Unknown Hospital',
+  bmdcNumber: apiDoc.bmdcNumber || '',
+  experienceYears: apiDoc.experienceYears || 0,
+  degrees: [],
+  education: [],
+  languages: ['Bengali', 'English'],
+  fees: apiDoc.fees,
+  available: true,
+  nextSlot: 'Tomorrow',
+  rating: apiDoc.rating || 0,
+  reviews: [],
+  patientsInQueue: 0,
+  isTelemedicineAvailable: true,
+  isVerified: true,
+  image: apiDoc.image || 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=400',
+  location: apiDoc.city || 'Dhaka',
+  status: 'Active'
+});
 
 interface PatientPortalProps {
   currentUser?: UserType;
@@ -22,6 +62,8 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   // View State
   const [viewMode, setViewMode] = useState<'DASHBOARD' | 'MY_APPOINTMENTS' | 'SETTINGS' | 'MEDICAL_HISTORY'>(initialMode);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  
+  console.log('🏥 PatientPortal rendered - ViewMode:', viewMode, 'User:', currentUser?.name || 'Guest');
   
   // Data Loading State
   const [isLoadingDoctors, setIsLoadingDoctors] = useState(true);
@@ -41,42 +83,6 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
     }
   }, [initialMode]);
 
-  // Restore booking draft after login
-  useEffect(() => {
-    if (currentUser) {
-      const draftJson = localStorage.getItem('booking_draft');
-      if (draftJson) {
-        try {
-          const draft: BookingDraft = JSON.parse(draftJson);
-          
-          // Check if draft is not expired (24h TTL)
-          const now = Date.now();
-          const ageHours = (now - draft.timestamp) / (1000 * 60 * 60);
-          
-          if (ageHours < 24) {
-            // Find the doctor from the draft
-            const doctor = doctors.find(d => d.id === draft.doctorId);
-            if (doctor) {
-              // Restore booking state
-              setBookingDoctor(doctor);
-              setSelectedDate(draft.selectedDate);
-              setSelectedTime(draft.selectedTime);
-              setBookingType(draft.bookingType);
-              setSymptomInput(draft.symptoms);
-              setBookingStep(2); // Go to review step
-              setIsBookingModalOpen(true);
-            }
-          }
-          
-          // Clear the draft after restoration
-          localStorage.removeItem('booking_draft');
-        } catch (err) {
-          console.error('Failed to restore booking draft:', err);
-        }
-      }
-    }
-  }, [currentUser, doctors]);
-
   // Appointments State
   const [appointments, setAppointments] = useState<Appointment[]>([]);
 
@@ -84,23 +90,25 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Use mock doctors for now (database has minimal schema)
-        setDoctors(MOCK_DOCTORS);
+        // Fetch doctors
+        setIsLoadingDoctors(true);
+        const doctorsData = await api.getDoctors();
+        console.log('✅ Doctors fetched:', doctorsData.length);
+        setDoctors(doctorsData.map(mapDoctorResponse));
         setIsLoadingDoctors(false);
 
         // Fetch appointments if user is logged in
         if (currentUser) {
           setIsLoadingAppointments(true);
           const appointmentsData = await api.getAppointments();
-          setAppointments(appointmentsData);
+          setAppointments(appointmentsData.map(mapAppointmentResponse));
+          setIsLoadingAppointments(false);
+        } else {
           setIsLoadingAppointments(false);
         }
       } catch (err: any) {
-        console.error('Error fetching data:', err);
+        console.error('❌ Error fetching data:', err);
         setError(err.message || 'Failed to load data');
-        // Fallback to mock data on error
-        setDoctors(MOCK_DOCTORS);
-        setAppointments(MOCK_APPOINTMENTS);
         setIsLoadingDoctors(false);
         setIsLoadingAppointments(false);
       }
@@ -159,7 +167,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
 
   // Cancellation Modal State
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
-  const [selectedAptIdCancel, setSelectedAptIdCancel] = useState<string | null>(null);
+  const [selectedAptIdCancel, setSelectedAptIdCancel] = useState<number | null>(null);
 
   // Review Modal State
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -168,12 +176,20 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
 
   // Settings Internal State
   const [activeSettingsTab, setActiveSettingsTab] = useState<'PROFILE' | 'SECURITY' | 'NOTIFICATIONS' | 'PRIVACY'>('PROFILE');
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [passwordForm, setPasswordForm] = useState({
+      oldPassword: '',
+      newPassword: '',
+      confirmPassword: ''
+  });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   
   const [settingsForm, setSettingsForm] = useState({
-      name: currentUser?.name || 'Rahim Uddin',
-      email: currentUser?.email || 'rahim@example.com',
-      phone: '01712345678',
-      bloodGroup: MOCK_VITALS.bloodGroup,
+      name: currentUser?.name || '',
+      email: currentUser?.email || '',
+      phone: '',
+      bloodGroup: '',
       notifications: {
           email: true,
           sms: true,
@@ -185,15 +201,27 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
       }
   });
 
-  // Update form if currentUser changes (e.g. login)
+  // Fetch patient profile data on mount
   useEffect(() => {
-      if (currentUser) {
-          setSettingsForm(prev => ({
-              ...prev,
-              name: currentUser.name,
-              email: currentUser.email
-          }));
-      }
+      const fetchProfile = async () => {
+          if (!currentUser) return;
+          
+          try {
+              const profile = await api.getPatientProfile();
+              setSettingsForm(prev => ({
+                  ...prev,
+                  name: profile.name,
+                  email: profile.email,
+                  phone: profile.phone || '',
+                  bloodGroup: profile.bloodGroup || ''
+              }));
+              setProfileImage(profile.profileImage || null);
+          } catch (err: any) {
+              console.error('Error fetching profile:', err);
+          }
+      };
+      
+      fetchProfile();
   }, [currentUser]);
 
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -228,56 +256,26 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   };
 
   const handleConfirmBooking = async () => {
-      // Check if user is authenticated
-      if (!currentUser) {
-        // Save booking draft to localStorage
-        const draft: BookingDraft = {
-          doctorId: bookingDoctor!.id,
-          doctorName: bookingDoctor!.name,
-          selectedDate,
-          selectedTime,
-          bookingType,
-          symptoms: symptomInput || 'General checkup',
-          timestamp: Date.now()
-        };
-        
-        localStorage.setItem('booking_draft', JSON.stringify(draft));
-        
-        // Redirect to login with returnTo parameter
-        window.location.href = window.location.pathname + '?returnTo=booking';
-        onNavigate('patient_login');
-        return;
-      }
-      
       try {
         const appointmentData = {
-          doctorId: bookingDoctor!.id,
+          doctorId: Number(bookingDoctor!.id),
           appointmentDate: selectedDate,
           appointmentTime: selectedTime,
-          consultationType: bookingType === 'Telemedicine' ? 'ONLINE' : 'PHYSICAL',
           symptoms: symptomInput || 'General checkup'
         };
 
+        console.log('📅 Booking appointment:', appointmentData);
         const newApt = await api.createAppointment(appointmentData);
+        console.log('✅ Appointment created:', newApt);
         
-        // Add to local state
-        setAppointments(prev => [...prev, {
-          id: newApt.id.toString(),
-          doctorName: bookingDoctor!.name,
-          patientName: currentUser.name,
-          date: selectedDate,
-          time: selectedTime,
-          type: bookingType,
-          status: AppointmentStatus.CONFIRMED,
-          queueNumber: newApt.queueNumber || Math.floor(Math.random() * 20) + 10
-        }]);
+        // Refresh appointments list from database
+        const updatedAppointments = await api.getAppointments();
+        setAppointments(updatedAppointments.map(mapAppointmentResponse));
         
-        // Clear any existing draft
-        localStorage.removeItem('booking_draft');
-        
+        console.log('✅ Appointment list refreshed');
         setBookingStep(3);
       } catch (err: any) {
-        console.error('Error creating appointment:', err);
+        console.error('❌ Error creating appointment:', err);
         alert(err.message || 'Failed to book appointment. Please try again.');
       }
   };
@@ -314,7 +312,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
       setTrackedAppointment(null);
   };
 
-  const handleCancelClick = (e: React.MouseEvent, id: string) => {
+  const handleCancelClick = (e: React.MouseEvent, id: number) => {
       e.stopPropagation();
       setSelectedAptIdCancel(id);
       setIsCancelModalOpen(true);
@@ -323,13 +321,17 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   const confirmCancel = async () => {
       if (selectedAptIdCancel) {
           try {
+              // Use PATCH to update status to CANCELLED
               await api.updateAppointment(selectedAptIdCancel, { status: 'CANCELLED' });
               
+              // Update local state to reflect cancellation
               setAppointments(prev => prev.map(apt => 
                   apt.id === selectedAptIdCancel ? { ...apt, status: AppointmentStatus.CANCELLED } : apt
               ));
+              
+              console.log('✅ Appointment cancelled:', selectedAptIdCancel);
           } catch (err: any) {
-              console.error('Error cancelling appointment:', err);
+              console.error('❌ Error cancelling appointment:', err);
               alert(err.message || 'Failed to cancel appointment');
           }
       }
@@ -350,7 +352,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
       if (currentUser) {
           try {
               const appointmentsData = await api.getAppointments();
-              setAppointments(appointmentsData);
+              setAppointments(appointmentsData.map(mapAppointmentResponse));
           } catch (err) {
               console.error('Error refreshing appointments:', err);
           }
@@ -359,19 +361,105 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   };
 
   const saveSettings = async () => {
+      if (!currentUser) return;
+      
       setIsSavingSettings(true);
       try {
-          await api.updateProfile({
-              name: settingsForm.name,
+          const updatedProfile = await api.updatePatientProfile(Number(currentUser.id), {
+              full_name: settingsForm.name,
               phone: settingsForm.phone,
-              email: settingsForm.email
+              blood_group: settingsForm.bloodGroup
           });
-          alert("Settings saved successfully!");
+          
+          // Update local user state to reflect changes immediately
+          const updatedUser = {
+              ...currentUser,
+              name: updatedProfile.name,
+              email: updatedProfile.email
+          };
+          
+          // Update localStorage
+          localStorage.setItem('mediconnect_user', JSON.stringify(updatedUser));
+          
+          alert("Profile updated successfully!");
+          console.log('✅ Profile settings saved and user state updated');
+          
+          // Refresh profile data from server to ensure sync
+          const profile = await api.getPatientProfile();
+          setSettingsForm(prev => ({
+              ...prev,
+              name: profile.name,
+              email: profile.email,
+              phone: profile.phone || '',
+              bloodGroup: profile.bloodGroup || ''
+          }));
       } catch (err: any) {
-          console.error('Error saving settings:', err);
+          console.error('❌ Error saving settings:', err);
           alert(err.message || 'Failed to save settings');
       } finally {
           setIsSavingSettings(false);
+      }
+  };
+
+  const handlePasswordChange = async () => {
+      if (!currentUser) return;
+
+      if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+          alert('New passwords do not match');
+          return;
+      }
+
+      if (passwordForm.newPassword.length < 6) {
+          alert('Password must be at least 6 characters');
+          return;
+      }
+
+      setIsChangingPassword(true);
+      try {
+          await api.changePatientPassword(
+              Number(currentUser.id),
+              passwordForm.oldPassword,
+              passwordForm.newPassword
+          );
+          alert('Password changed successfully!');
+          setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+          console.log('✅ Password changed successfully');
+      } catch (err: any) {
+          console.error('❌ Error changing password:', err);
+          alert(err.message || 'Failed to change password');
+      } finally {
+          setIsChangingPassword(false);
+      }
+  };
+
+  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+      if (!currentUser || !event.target.files || event.target.files.length === 0) return;
+
+      const file = event.target.files[0];
+      
+      // Validate file size (5MB max)
+      if (file.size > 5 * 1024 * 1024) {
+          alert('File size must be less than 5MB');
+          return;
+      }
+
+      // Validate file type
+      if (!file.type.match(/image\/(jpeg|jpg|png|gif)/)) {
+          alert('Only image files (JPEG, PNG, GIF) are allowed');
+          return;
+      }
+
+      setIsUploadingPhoto(true);
+      try {
+          const result = await api.uploadPatientPhoto(Number(currentUser.id), file);
+          setProfileImage(result.profileImage);
+          alert('Profile picture updated successfully!');
+          console.log('✅ Profile photo uploaded:', result.profileImage);
+      } catch (err: any) {
+          console.error('❌ Error uploading photo:', err);
+          alert(err.message || 'Failed to upload photo');
+      } finally {
+          setIsUploadingPhoto(false);
       }
   };
 
@@ -407,38 +495,36 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
        <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 flex flex-col transition-transform duration-300 md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
             <div className="p-6 border-b border-slate-100">
                 <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-slate-200 overflow-hidden shadow-sm flex items-center justify-center text-slate-500">
-                        <User size={24} />
-                    </div>
+                    {profileImage ? (
+                        <img 
+                            src={`http://localhost:5000${profileImage}`} 
+                            alt={settingsForm.name}
+                            className="w-12 h-12 rounded-full object-cover shadow-sm"
+                        />
+                    ) : (
+                        <div className="w-12 h-12 rounded-full bg-slate-200 overflow-hidden shadow-sm flex items-center justify-center text-slate-500">
+                            <User size={24} />
+                        </div>
+                    )}
                     <div>
-                        <h3 className="font-bold text-slate-800 text-sm truncate w-32">{settingsForm.name}</h3>
+                        <h3 className="font-bold text-slate-800 text-sm truncate w-32">{settingsForm.name || 'Patient'}</h3>
                         <p className="text-xs text-primary-600 font-bold flex items-center gap-1">Patient Portal</p>
                     </div>
                 </div>
             </div>
             <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
                 <SidebarItem view="DASHBOARD" icon={<Home size={18}/>} label="Find Doctor" />
-                {currentUser && (
-                  <>
-                    <SidebarItem view="MY_APPOINTMENTS" icon={<Calendar size={18}/>} label="My Appointments" />
-                    <SidebarItem view="MEDICAL_HISTORY" icon={<FileText size={18}/>} label="Medical History" />
-                    <SidebarItem view="SETTINGS" icon={<Settings size={18}/>} label="Settings" />
-                  </>
-                )}
+                <SidebarItem view="MY_APPOINTMENTS" icon={<Calendar size={18}/>} label="My Appointments" />
+                <SidebarItem view="MEDICAL_HISTORY" icon={<FileText size={18}/>} label="Medical History" />
+                <SidebarItem view="SETTINGS" icon={<Settings size={18}/>} label="Settings" />
             </nav>
             <div className="p-4 border-t border-slate-100">
                 <button onClick={() => onNavigate('emergency')} className="flex items-center gap-2 text-white bg-red-600 hover:bg-red-700 font-medium p-3 rounded-lg w-full transition-colors mb-2 justify-center shadow-md shadow-red-200">
                     <AlertTriangle size={18} /> Emergency Mode
                 </button>
-                {currentUser ? (
-                  <button onClick={onBack} className="flex items-center gap-2 text-slate-500 font-medium hover:bg-slate-100 p-3 rounded-lg w-full transition-colors justify-center">
-                      <LogOut size={18} /> Logout
-                  </button>
-                ) : (
-                  <button onClick={() => onNavigate('patient_login')} className="flex items-center gap-2 text-white bg-primary-600 hover:bg-primary-700 font-medium p-3 rounded-lg w-full transition-colors justify-center">
-                      <User size={18} /> Login / Register
-                  </button>
-                )}
+                <button onClick={onBack} className="flex items-center gap-2 text-slate-500 font-medium hover:bg-slate-100 p-3 rounded-lg w-full transition-colors justify-center">
+                    <LogOut size={18} /> Logout
+                </button>
             </div>
        </aside>
 
@@ -462,13 +548,10 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                              viewMode === 'MY_APPOINTMENTS' ? 'My Appointments' : 
                              viewMode === 'MEDICAL_HISTORY' ? 'Medical Records' : 'Settings'}
                         </h2>
-                        {!currentUser && viewMode === 'DASHBOARD' && (
-                          <p className="text-sm text-slate-500 mt-1">Browsing as Guest · <button onClick={() => onNavigate('patient_login')} className="text-primary-600 hover:underline font-medium">Login</button> to book appointments</p>
-                        )}
                    </div>
                 </div>
                 <div className="flex gap-3">
-                    {currentUser && <NotificationBell />}
+                    <NotificationBell />
                 </div>
           </div>
 
@@ -524,11 +607,34 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                               <div className="space-y-6 animate-fade-in">
                                   <h3 className="text-2xl font-bold text-slate-900 mb-6">Personal Information</h3>
                                   <div className="flex items-center gap-6 mb-8">
-                                      <div className="w-24 h-24 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 border-4 border-white shadow-lg">
-                                          <User size={40}/>
-                                      </div>
+                                      {profileImage ? (
+                                          <img 
+                                              src={`http://localhost:5000${profileImage}`} 
+                                              alt="Profile" 
+                                              className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
+                                          />
+                                      ) : (
+                                          <div className="w-24 h-24 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 border-4 border-white shadow-lg">
+                                              <User size={40}/>
+                                          </div>
+                                      )}
                                       <div>
-                                          <Button variant="outline" className="text-sm">Change Photo</Button>
+                                          <input 
+                                              type="file" 
+                                              id="photoUpload" 
+                                              accept="image/jpeg,image/jpg,image/png,image/gif"
+                                              onChange={handlePhotoUpload}
+                                              className="hidden"
+                                          />
+                                          <label htmlFor="photoUpload">
+                                              <span 
+                                                  className={`inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium transition-colors cursor-pointer ${isUploadingPhoto ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50'}`}
+                                              >
+                                                  <Upload size={16} className="mr-2" />
+                                                  {isUploadingPhoto ? 'Uploading...' : 'Change Photo'}
+                                              </span>
+                                          </label>
+                                          <p className="text-xs text-slate-500 mt-2">Max 5MB. JPG, PNG, GIF only.</p>
                                       </div>
                                   </div>
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -538,15 +644,35 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                                       </div>
                                       <div>
                                           <label className="block text-sm font-medium text-slate-700 mb-1">Blood Group</label>
-                                          <input type="text" className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" value={settingsForm.bloodGroup} onChange={e => setSettingsForm({...settingsForm, bloodGroup: e.target.value})} />
+                                          <select 
+                                              className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" 
+                                              value={settingsForm.bloodGroup} 
+                                              onChange={e => setSettingsForm({...settingsForm, bloodGroup: e.target.value})}
+                                          >
+                                              <option value="">Select Blood Group</option>
+                                              <option value="A+">A+</option>
+                                              <option value="A-">A-</option>
+                                              <option value="B+">B+</option>
+                                              <option value="B-">B-</option>
+                                              <option value="AB+">AB+</option>
+                                              <option value="AB-">AB-</option>
+                                              <option value="O+">O+</option>
+                                              <option value="O-">O-</option>
+                                          </select>
                                       </div>
                                       <div>
                                           <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                                          <input type="email" className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" value={settingsForm.email} onChange={e => setSettingsForm({...settingsForm, email: e.target.value})} />
+                                          <input 
+                                              type="email" 
+                                              className="w-full p-2.5 rounded-lg border border-slate-300 bg-slate-50 cursor-not-allowed" 
+                                              value={settingsForm.email} 
+                                              disabled
+                                              title="Email cannot be changed"
+                                          />
                                       </div>
                                       <div>
                                           <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
-                                          <input type="tel" className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" value={settingsForm.phone} onChange={e => setSettingsForm({...settingsForm, phone: e.target.value})} />
+                                          <input type="tel" className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" value={settingsForm.phone} onChange={e => setSettingsForm({...settingsForm, phone: e.target.value})} placeholder="01712345678" />
                                       </div>
                                   </div>
                                   <div className="flex justify-end pt-4">
@@ -561,17 +687,43 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                                   <div className="max-w-md space-y-4">
                                       <div>
                                           <label className="block text-sm font-medium text-slate-700 mb-1">Current Password</label>
-                                          <input type="password" className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" placeholder="••••••••" />
+                                          <input 
+                                              type="password" 
+                                              className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" 
+                                              placeholder="••••••••"
+                                              value={passwordForm.oldPassword}
+                                              onChange={e => setPasswordForm({...passwordForm, oldPassword: e.target.value})}
+                                          />
                                       </div>
                                       <div>
                                           <label className="block text-sm font-medium text-slate-700 mb-1">New Password</label>
-                                          <input type="password" className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" placeholder="••••••••" />
+                                          <input 
+                                              type="password" 
+                                              className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" 
+                                              placeholder="••••••••"
+                                              value={passwordForm.newPassword}
+                                              onChange={e => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                                          />
                                       </div>
                                       <div>
                                           <label className="block text-sm font-medium text-slate-700 mb-1">Confirm New Password</label>
-                                          <input type="password" className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" placeholder="••••••••" />
+                                          <input 
+                                              type="password" 
+                                              className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" 
+                                              placeholder="••••••••"
+                                              value={passwordForm.confirmPassword}
+                                              onChange={e => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                                          />
                                       </div>
-                                      <Button className="mt-4">Update Password</Button>
+                                      <Button 
+                                          className="mt-4" 
+                                          onClick={handlePasswordChange}
+                                          loading={isChangingPassword}
+                                          disabled={!passwordForm.oldPassword || !passwordForm.newPassword || !passwordForm.confirmPassword}
+                                      >
+                                          <Lock size={16} className="mr-2" />
+                                          {isChangingPassword ? 'Updating...' : 'Update Password'}
+                                      </Button>
                                   </div>
                               </div>
                           )}
@@ -731,6 +883,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                   {/* Review Modal */}
                   {isReviewModalOpen && reviewDoctorId && reviewAppointmentId && (
                       <ReviewModal
+                          isOpen={isReviewModalOpen}
                           doctorId={reviewDoctorId}
                           appointmentId={reviewAppointmentId}
                           onClose={() => setIsReviewModalOpen(false)}
@@ -742,11 +895,18 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
 
           {/* --- VIEW: DASHBOARD (FIND DOCTOR) --- */}
           {viewMode === 'DASHBOARD' && (
-            <div className="space-y-8 animate-fade-in pb-20">
+            <div className="space-y-8 pb-20">
+              
+              {/* Debug Info - Remove after testing */}
+              <div className="bg-yellow-100 border border-yellow-400 p-4 rounded-lg text-sm">
+                <p><strong>Debug:</strong> Dashboard View Active</p>
+                <p>Doctors loaded: {doctors.length}</p>
+                <p>Loading: {isLoadingDoctors ? 'Yes' : 'No'}</p>
+                <p>Filtered: {filteredDoctors.length}</p>
+              </div>
               
               {/* Header & AI Symptom Checker */}
               <section className="bg-primary-600 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
-                {/* ... (AI Logic same as before) ... */}
                 <div className="relative z-10 max-w-2xl">
                   <h1 className="text-3xl font-bold mb-4">Find the Right Care</h1>
                   <p className="text-primary-100 mb-6">Describe your symptoms to get AI recommendations, or search manually below.</p>
@@ -931,7 +1091,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
                                           <Star size={16} className="text-yellow-500" />
                                           Patient Reviews
                                       </p>
-                                      <DoctorReviews doctorId={bookingDoctor.id} limit={2} compact={true} />
+                                      <DoctorReviews doctorId={Number(bookingDoctor.id)} limit={2} compact={true} />
                                   </div>
                               </div>
                          </div>

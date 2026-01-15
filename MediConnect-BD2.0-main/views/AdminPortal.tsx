@@ -193,14 +193,14 @@ export const AdminPortal = ({ currentUser, onBack }: { currentUser: User, onBack
   // Appointment Logic
   const filteredAppointments = appointments.filter(apt => {
       const matchesSearch = apt.patientName.toLowerCase().includes(appointmentFilter.search.toLowerCase()) || 
-                            apt.id.toLowerCase().includes(appointmentFilter.search.toLowerCase());
+                            String(apt.id).toLowerCase().includes(appointmentFilter.search.toLowerCase());
       const matchesStatus = appointmentFilter.status === 'All' || apt.status === appointmentFilter.status;
       const matchesDate = !appointmentFilter.date || apt.date === appointmentFilter.date;
       const matchesDoctor = appointmentFilter.doctor === 'All' || apt.doctorName === appointmentFilter.doctor;
       return matchesSearch && matchesStatus && matchesDate && matchesDoctor;
   });
 
-  const updateAppointmentStatus = (id: string, status: AppointmentStatus) => {
+  const updateAppointmentStatus = (id: number, status: AppointmentStatus) => {
       setAppointments(prev => prev.map(a => a.id === id ? { ...a, status } : a));
   };
 

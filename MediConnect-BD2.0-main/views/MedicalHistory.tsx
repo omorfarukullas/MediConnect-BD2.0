@@ -22,7 +22,7 @@ export const MedicalHistory = ({ onBack }: { onBack: () => void }) => {
     try {
       setLoadingDocuments(true);
       const docs = await api.getDocuments();
-      setDocuments(docs);
+      setDocuments(docs as any);
     } catch (error) {
       console.error('Error fetching documents:', error);
     } finally {

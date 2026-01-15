@@ -12,6 +12,7 @@ const NotificationService = require('./services/notificationService');
 const newAuthRoutes = require('./routes/newAuthRoutes');
 const newDoctorRoutes = require('./routes/newDoctorRoutes');
 const newAppointmentRoutes = require('./routes/newAppointmentRoutes');
+const patientRoutes = require('./routes/patientRoutes');
 
 // ===== OLD ROUTES (Commented out to prevent crashes) =====
 // Uncomment these when you need the full system
@@ -48,6 +49,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/v2/auth', newAuthRoutes);
 app.use('/api/v2/doctors', newDoctorRoutes);
 app.use('/api/v2/appointments', newAppointmentRoutes);
+app.use('/api/v2/patients', patientRoutes);
 
 // ===== OLD ROUTES (Active for compatibility) =====
 // app.use('/api/auth', userRoutes);
@@ -136,14 +138,38 @@ app.set('notificationService', notificationService);
 
 console.log('✅ Socket.IO and Notification Service initialized');
 
+// Handle uncaught errors to prevent silent exits
+process.on('uncaughtException', (err) => {
+    console.error('❌ Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 // Sync Database and Start Server
 const PORT = process.env.PORT || 5000;
 
 sequelize.sync({ alter: false }).then(() => {
     console.log('MySQL Database Synced');
-    server.listen(PORT, () => {
+    const serverInstance = server.listen(PORT, '0.0.0.0', () => {
         console.log(`Server running on port ${PORT}`);
+        console.log(`Backend accessible at: http://localhost:${PORT}`);
+        console.log(`Health check: http://localhost:${PORT}/api/health`);
+    });
+    
+    serverInstance.on('error', (err) => {
+        console.error('❌ Server failed to start:', err);
+        if (err.code === 'EADDRINUSE') {
+            console.error(`Port ${PORT} is already in use`);
+        }
+        process.exit(1);
+    });
+    
+    serverInstance.on('listening', () => {
+        console.log('✅ Server is now listening and ready to accept connections');
     });
 }).catch(err => {
     console.error('Failed to sync database:', err);
+    process.exit(1);
 });

@@ -33,7 +33,7 @@ export const HospitalLogin: React.FC<HospitalLoginProps> = ({ onBack, onLoginSuc
 
       // Success - pass hospital ID and email to parent
       // For now, use user ID as hospital ID (update when hospitalId field is added)
-      onLoginSuccess(response.hospitalId || response.id, response.email);
+      onLoginSuccess(String(response.hospitalId || response.id), response.email);
     } catch (err: any) {
       setError(err.message || 'Invalid email or password.');
       setIsLoading(false);

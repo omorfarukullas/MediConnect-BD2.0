@@ -102,7 +102,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         setUploadStatus('idle');
       }, 2000);
 
-      onUploadSuccess?.(response.document);
+      onUploadSuccess?.((response as any).document);
     } catch (error: any) {
       setUploading(false);
       setUploadStatus('error');
